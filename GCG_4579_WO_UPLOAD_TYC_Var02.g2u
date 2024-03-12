@@ -1,0 +1,681 @@
+﻿Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.Global.sExcel.Declare(String)
+Variable.UDT.uJobs.Define("sJob",String)
+Variable.UDT.uJobs.Define("sSuffix",String)
+Variable.UDT.uJobs.Define("iQty",Long)
+Variable.UDT.uJobs.Define("sProjGroup",String)
+Variable.UDT.uJobs.Define("sPartNo",String)
+Variable.UDT.uJobs.Define("Line1",String)
+Variable.UDT.uJobs.Define("Line2",String)
+Variable.UDT.uJobs.Define("Line3",String)
+Variable.UDT.uJobs.Define("Line4",String)
+Variable.UDT.uJobs.Define("Line5",String)
+Variable.UDT.uJobs.Define("Line6",String)
+Variable.UDT.uJobs.Define("Line7",String)
+Variable.UDT.uJobs.Define("Line8",String)
+Variable.UDT.uJobs.Define("Line9",String)
+Variable.uGlobal.uJobs.Declare("uJobs")
+Variable.Global.sCreateJobs.Declare(String)
+Variable.Global.sAllJobs.Declare(String)
+Variable.Global.iSeqInc.Declare(Long,-1)
+Variable.Global.iJobsUB.Declare(Long,-1)
+Variable.Global.sExistJobs.Declare(String)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'edit by Bix from GSS
+'4 Sept 2019
+'edit by William from GSS
+'25 June 2021
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.sFileName.Declare(String)
+V.Local.sSql.Declare(String)
+
+F.ODBC.connection!conx.OpenCompanyConnection
+
+F.Intrinsic.UI.ShowOpenFileDialog("","Excel|*.xls*","",V.Global.sExcel)
+
+F.Intrinsic.Control.If(V.Global.sExcel,=,"***CANCEL***")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Else
+	V.Local.sSQL.Set("Select F_LONG From OP_HEADER Where ID = '401113'")
+	F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+	F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,False)
+		V.Global.iSeqInc.Set(V.ODBC.conx!rst.FieldVal!F_LONG)
+	F.Intrinsic.Control.Else
+		V.Global.iSeqInc.Set(1000)
+	F.Intrinsic.Control.EndIf
+	F.ODBC.conx!rst.Close
+
+	'Empty UDT
+	V.uGlobal.uJobs.Redim(-1,-1)
+	V.Global.iJobsUB.Set(-1)
+	F.Intrinsic.Control.CallSub(Readfile)
+	  
+	F.Intrinsic.Control.If(V.Global.sCreateJobs,<>,"")
+		'Split into list of JOB*!*SUFFIX
+		F.Intrinsic.String.Split(V.Global.sCreateJobs,"!*!",V.Global.sCreateJobs)
+		
+		'Remove duplicates from the JOB*!*SUFFIX list
+		F.Intrinsic.String.RemoveArrayDuplicates(V.Global.sCreateJobs,V.Global.sCreateJobs)
+		
+		
+		F.Intrinsic.Control.CallSub(Createjobs)
+		Function.Intrinsic.Control.If(V.Global.sCreateJobs, <>, "")
+			Function.Intrinsic.Control.CallSub(unload)
+		Function.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.If(V.Global.sExistJobs,<>,"")
+		'Split into list of JOB*!*SUFFIX*!*DATE_DUE
+		F.Intrinsic.String.Split(V.Global.sExistJobs,"!*!",V.Global.sExistJobs)
+		
+		'Remove duplicates from the JOB*!*SUFFIX*!*DATE_DUE list
+		F.Intrinsic.String.RemoveArrayDuplicates(V.Global.sExistJobs,V.Global.sExistJobs)
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.If(V.Global.sAllJobs,<>,"")
+		'Split into list of JOB*!*SUFFIX
+		F.Intrinsic.String.Split(V.Global.sAllJobs,"!*!",V.Global.sAllJobs)
+		
+		'Remove duplicates from the JOB*!*SUFFIX list
+		F.Intrinsic.String.RemoveArrayDuplicates(V.Global.sAllJobs,V.Global.sAllJobs)
+	
+		F.Intrinsic.Control.CallSub(Writematlseq)
+		
+		F.Intrinsic.Control.CallSub(Schedulejobs)
+		
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Start
+
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.End
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Unload.End
+
+Program.Sub.ReadFile.Start
+F.Intrinsic.Control.SetErrorHandler("ReadFile_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.i.Declare(Long)
+V.Local.iRows.Declare(Long)
+V.Local.sData.Declare(String)
+V.Local.sRow.Declare(String)
+V.Local.sCol.Declare(String)
+V.Local.sSql.Declare(String)
+V.Local.sSheet.Declare(String)
+V.Local.iSheet.Declare(Long)
+V.Local.sSheetLeft.Declare(String)
+
+F.Intrinsic.UI.InvokeWaitDialog("Loading...","Please Wait...")
+
+F.Automation.MSExcel.ReadSpreadsheet(V.Global.sExcel,V.Local.sData)
+F.Intrinsic.String.Split(V.Local.sData,"&^&",V.Local.sSheet)
+
+F.Intrinsic.Control.For(V.Local.i,0,V.Local.sSheet.UBound,1)
+	F.Intrinsic.String.Left(V.Local.sSheet(V.Local.i),12,V.Local.sSheetLeft)
+	F.Intrinsic.Control.If(V.Local.sSheetLeft,=,"WO#*!*SUFFIX")
+		V.Local.iSheet.Set(V.Local.i)
+		F.Intrinsic.Control.ExitFor(V.Local.i)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.i)
+
+F.Intrinsic.String.Split(V.Local.sSheet(V.Local.iSheet),"$!$",V.Local.sRow)
+
+
+F.Intrinsic.Control.For(V.Local.i,1,V.Local.sRow.UBound,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Loading...",V.Local.i,1,V.Local.sRow.UBound)
+	F.Intrinsic.String.Split(V.Local.sRow(v.Local.i),"*!*",V.Local.sCol)
+	F.Intrinsic.Control.If(V.Local.sCol(0),<>,"")
+		
+		'Check Job header for existing job and get Due Date
+		F.Intrinsic.String.Concat("Select DATE_DUE, DATE_CLOSED From V_JOB_HEADER Where JOB = '",V.Local.sCol(0),"' And SUFFIX = '",V.Local.sCol(1),"'",V.Local.sSQL)
+		F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,True)
+			'Add Job and Suffix to Create Jobs String THIS JOB DOES NOT EXIST
+			F.Intrinsic.Control.If(V.Global.sCreateJobs,=,"")
+				F.Intrinsic.string.Concat(V.Local.sCol(0),"*!*",V.Local.sCol(1),V.Global.sCreateJobs)
+			F.Intrinsic.Control.Else
+				F.Intrinsic.String.Concat(V.Global.sCreateJobs,"!*!",V.Local.sCol(0),"*!*",V.Local.sCol(1),V.Global.sCreateJobs)
+			F.Intrinsic.Control.EndIf
+			F.Intrinsic.UI.CloseWaitDialog
+			F.Intrinsic.String.Build("Could not find a Job in the DataBase{0}Job: {1}{0}Suffix: {2}{0}File Row: {3}",V.Ambient.NewLine,V.Local.sCol(0),V.Local.sCol(1),V.Local.i.++,V.Local.sError)
+			F.Intrinsic.UI.Msgbox(V.Local.sError,"Job not found!")
+			F.Intrinsic.Control.End
+		F.Intrinsic.Control.Else
+			F.Intrinsic.Control.If(V.Global.sExistJobs,=,"")
+				F.Intrinsic.string.Concat(V.Local.sCol(0),"*!*",V.Local.sCol(1),"*!*",V.ODBC.Conx!rst.FieldValTrim!DATE_DUE,V.Global.sExistJobs)
+			F.Intrinsic.Control.Else
+				F.Intrinsic.String.Concat(V.Global.sExistJobs,"!*!",V.Local.sCol(0),"*!*",V.Local.sCol(1),"*!*",V.ODBC.Conx!rst.FieldValTrim!DATE_DUE,V.Global.sExistJobs)
+			F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.If(V.ODBC.conx!rst.FieldVal!DATE_CLOSED,!=,"1/1/1900")
+				F.Intrinsic.UI.CloseWaitDialog
+				F.Intrinsic.String.Build("Found a Job that is closed{0}Job: {1}{0}Suffix: {2}{0}Closed Date: {3}{0}File Row: {4}",V.Ambient.NewLine,V.Local.sCol(0),V.Local.sCol(1),V.ODBC.conx!rst.FieldVal!DATE_CLOSED,V.Local.i.++,V.Local.sError)
+				F.Intrinsic.UI.Msgbox(V.Local.sError,"Job closed!")
+				F.Intrinsic.Control.End
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+		F.ODBC.conx!rst.Close
+		
+		'Add Job and Suffix to all Jobs String
+		F.Intrinsic.Control.If(V.Global.sAllJobs,=,"")
+			F.Intrinsic.string.Concat(V.Local.sCol(0),"*!*",V.Local.sCol(1),V.Global.sAllJobs)
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Concat(V.Global.sAllJobs,"!*!",V.Local.sCol(0),"*!*",V.Local.sCol(1),V.Global.sAllJobs)
+		F.Intrinsic.Control.EndIf
+	
+		'Load UDT
+		F.Intrinsic.Control.If(V.uGlobal.uJobs.UBound,=,-1)
+			V.uGlobal.uJobs.Redim(0,0)
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Math.Add(V.Global.iJobsUB,1,V.Global.iJobsUB)
+		V.uGlobal.uJobs.RedimPreserve(0,V.Global.iJobsUB)
+		
+		V.uGlobal.uJobs(v.Global.iJobsUB)!sJob.Set(V.Local.sCol(0))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!sSuffix.Set(V.Local.sCol(1))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!iQty.Set(V.Local.sCol(2))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!sProjGroup.Set(V.Local.sCol(3))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!sPartNo.Set(V.Local.sCol(4))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line1.Set(V.Local.sCol(5))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line2.Set(V.Local.sCol(6))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line3.Set(V.Local.sCol(7))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line4.Set(V.Local.sCol(8))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line5.Set(V.Local.sCol(9))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line6.Set(V.Local.sCol(10))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line7.Set(V.Local.sCol(11))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line8.Set(V.Local.sCol(12))
+		V.uGlobal.uJobs(v.Global.iJobsUB)!Line9.Set(V.Local.sCol(13))
+	F.Intrinsic.Control.EndIf	
+	
+F.Intrinsic.Control.Next(V.Local.i)
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("ReadFile_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.ReadFile.End
+
+Program.Sub.CreateJobs.Start
+F.Intrinsic.Control.SetErrorHandler("CreateJob_Err")
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.i.Declare(Long)
+V.Local.sJobSuffix.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.sText.Declare(String)
+V.Local.sTemp.Declare(String)
+V.Local.sDate.Declare(String)
+V.Local.sTime.Declare(String)
+V.Local.sDir.Declare(String)
+V.Local.bExists.Declare(Boolean)
+
+'check if directory exists- if not create it
+F.Intrinsic.String.Build("{0}\WorkOrder_Error",V.Caller.FilesDir,V.Local.sDir) 
+F.Intrinsic.File.DirExists(V.Local.sDir,V.Local.bExists) 
+
+F.Intrinsic.Control.If(V.Local.bExists,=,False) 
+	f.Intrinsic.File.CreateDir(V.Local.sDir) 
+Function.Intrinsic.Control.EndIf
+
+'set date and time for file path
+F.Intrinsic.String.Format(V.Ambient.Date, "YYYYMMDD", V.Local.sDate)
+Function.Intrinsic.String.TimeStringSec(V.Ambient.Time, V.Local.sTime)
+'create file name
+F.Intrinsic.String.Build("{0}\WorkOrder_Error_{1}{2}.txt",V.Local.sDir,V.Local.sDate,V.Local.sTime,V.Local.sFile)
+
+
+
+
+'''F.Intrinsic.String.Concat(V.caller.FilesDir,"\JBMDLA.TXT",V.Local.sFile)
+'''F.Intrinsic.File.String2File(V.Local.sFile,"")
+
+F.Intrinsic.Control.For(V.Local.i,0,V.Global.sCreateJobs.UBound,1)
+	F.Intrinsic.String.Split(V.Global.sCreateJobs(V.Local.i),"*!*",V.Local.sJobSuffix)
+	V.Local.sText.Set("")
+	'Work Order Job
+	F.Intrinsic.String.RPad(V.Local.sJobSuffix(0)," ",6,V.Local.sTemp)
+	F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+	'Work Order Suffix
+	F.Intrinsic.String.RPad(V.Local.sJobSuffix(1)," ",3,V.Local.sTemp)
+	F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+	F.Intrinsic.String.Concat(V.local.sText,V.Ambient.NewLine,V.Local.sText)
+'''	F.Intrinsic.File.Append2File(V.Local.sFile,V.Local.sText)
+F.Intrinsic.Control.Next(V.Local.i)
+
+Function.Intrinsic.File.String2File(V.Local.sFile, V.Local.sText)
+
+'''F.Global.General.CallWrapperSync(50,"UPLJBMUL/a")
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("CreateJob_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.CreateJobs.End
+
+Program.Sub.WriteMatlSeq.Start
+F.Intrinsic.Control.SetErrorHandler("WriteMatlSeq_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.i.Declare(Long)
+V.Local.i2.Declare(Long)
+V.Local.sJobSuffix.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.sText.Declare(String)
+V.Local.sTemp.Declare(String)
+V.Local.sSql.Declare(String)
+V.Local.iSQLRet.Declare(Long)
+V.Local.iMatlSeqNo.Declare(Long)
+V.Local.sMatlSeqNo.Declare(String)
+V.Local.iCommSeqNo.Declare(String)
+V.Local.sComment.Declare(String)
+
+V.Local.sComm1.Declare(String)
+V.Local.sComm2.Declare(String)
+V.Local.sComm3.Declare(String)
+
+
+F.Intrinsic.String.Concat(V.caller.FilesDir,"\JOBCOST.TXT",V.Local.sFile)
+F.Intrinsic.File.String2File(V.Local.sFile,"")
+
+F.Intrinsic.Control.For(V.Local.i,0,V.Global.sAllJobs.UBound,1)
+	F.Intrinsic.String.Split(V.Global.sAllJobs(V.Local.i),"*!*",V.Local.sJobSuffix)
+	
+	F.Intrinsic.Control.CallSub(Getnextseq,"sJobSuffix",V.Global.sAllJobs(V.Local.i))
+	V.Local.iMatlSeqNo.Set(V.Args.iMatlSeqNo)
+	F.Intrinsic.Control.For(V.Local.i2,0,V.uGlobal.uJobs.UBound,1)
+		F.Intrinsic.Control.If(V.Local.sJobSuffix(0),=,V.uGlobal.uJobs(V.Local.i2)!sJob)
+			F.Intrinsic.Control.If(V.Local.sJobSuffix(1),=,V.uGlobal.uJobs(V.Local.i2)!sSuffix)
+	'Material Line
+				'Increment the matl line sequence number
+				F.Intrinsic.Math.Add(V.Local.iMatlSeqNo,V.Global.iSeqInc,V.Local.iMatlSeqNo)
+				V.Local.sText.Set("")
+				'Work Order Job
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sJob," ",6,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Work Order Suffix
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sSuffix," ",3,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Set Comment Part 1 to job and suffix
+'				V.Local.sComm1.Set(V.Local.sText)
+				'Sequence
+				F.Intrinsic.String.LPad(V.Local.iMatlSeqNo,"0",6,V.Local.sMatlSeqNo)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sMatlSeqNo,V.Local.sText)
+				'Op Code thru Set Up Flag
+				F.Intrinsic.String.RPad(" "," ",7,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Set Comment Part 2 to Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.Local.sTemp,"C",V.Local.sComm2)
+				'LMOC
+				F.Intrinsic.String.Concat(V.local.sText,"M",V.Local.sText)
+				'Description
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line1," ",30,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'UM
+				F.Intrinsic.String.Concat(V.local.sText,"EA",V.Local.sText)
+				'PWC
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sPartNo," ",20,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Machine 1 thru Router Seq
+				F.Intrinsic.String.RPad(" "," ",26,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Setup Time
+				F.Intrinsic.String.LPad("0.0000","0",16,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Unit
+				F.Intrinsic.String.LPad(V.uGlobal.uJobs(V.Local.i2)!iQty,"0",16,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Burden Rate thru Sort Code
+				F.Intrinsic.String.RPad(" "," ",86,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Project Group
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sProjGroup," ",6,V.Local.sTemp)
+				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+				'Set Comment 3 to UM thru Project Group
+				F.Intrinsic.String.RPad(" "," ",192,V.Local.sTemp)
+'				V.Local.sComm3.Set(V.Local.sTemp)
+	'Comment 1 Line
+'				F.Intrinsic.Math.Add(V.Local.iMatlSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line2," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				V.Local.sComment.Set(V.uGlobal.uJobs(V.Local.i2)!Line2)
+	'Comment 2 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line3," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.NewLine,V.uGlobal.uJobs(V.Local.i2)!Line3,V.Local.sComment)
+	'Comment 3 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line4," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line4,V.Local.sComment)
+	'Comment 4 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line5," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line5,V.Local.sComment)
+	'Comment 5 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line6," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line6,V.Local.sComment)
+	'Comment 6 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line7," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line7,V.Local.sComment)
+	'Comment 7 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line8," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line8,V.Local.sComment)
+	'Comment 8 Line
+'				F.Intrinsic.Math.Add(V.Local.iCommSeqNo,1,V.Local.iCommSeqNo)
+'				F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+'				'Job and Suffix
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm1,V.Local.sText)
+'				'Sequence
+'				F.Intrinsic.String.LPad(V.Local.iCommSeqNo,"0",6,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'Op Code thru LMOC
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm2,V.Local.sText)
+'				'Description
+'				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!Line9," ",30,V.Local.sTemp)
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sTemp,V.Local.sText)
+'				'UM thru Project Group
+'				F.Intrinsic.String.Concat(V.local.sText,V.Local.sComm3,V.Local.sText)
+				F.Intrinsic.String.Concat(V.local.sText,V.Ambient.NewLine,V.Local.sText)
+				F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sComment,V.Ambient.Newline,V.uGlobal.uJobs(V.Local.i2)!Line9,V.Local.sComment)
+				'Add the comments for the sequence to the new WO_SEQ_COMMENTS table
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sJob," ",6,V.uGlobal.uJobs(V.Local.i2)!sJob)
+				F.Intrinsic.String.RPad(V.uGlobal.uJobs(V.Local.i2)!sSuffix," ",3,V.uGlobal.uJobs(V.Local.i2)!sSuffix)
+				
+				F.Intrinsic.String.Build("select count(WO) from WO_SEQ_COMMENTS where WO = '{0}' and WO_SUFFIX = '{1}' and WO_SEQ = '{2}'",V.uGlobal.uJobs(V.Local.i2)!sJob,V.uGlobal.uJobs(V.Local.i2)!sSuffix,V.Local.sMatlSeqNo,V.Local.sSQL)
+				F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSQL, V.Local.iSQLRet)
+				F.Intrinsic.Control.If(V.Local.iSQLRet,=,0)
+					F.Intrinsic.String.Build("INSERT INTO WO_SEQ_COMMENTS VALUES('{0}','{1}','{2}','{3}')",V.uGlobal.uJobs(V.Local.i2)!sJob,V.uGlobal.uJobs(V.Local.i2)!sSuffix,V.Local.sMatlSeqNo,V.Local.sComment,V.Local.sSQL)
+					F.ODBC.Connection!conx.Execute(V.Local.sSQL)
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.If(V.Local.iSQLRet,=,1)
+					F.Intrinsic.String.Build("UPDATE WO_SEQ_COMMENTS SET WO = '{0}', WO_SUFFIX = '{1}', WO_SEQ = '{2}', TEXT = '{3}'",V.uGlobal.uJobs(V.Local.i2)!sJob,V.uGlobal.uJobs(V.Local.i2)!sSuffix,V.Local.sMatlSeqNo,V.Local.sComment,V.Local.sSQL)
+					F.ODBC.Connection!conx.Execute(V.Local.sSQL)
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.File.Append2File(V.Local.sFile,V.Local.sText)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.i2)
+F.Intrinsic.Control.Next(V.Local.i)
+
+F.Global.General.CallWrapperSync(50,"UPLJOBST/A")
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("WriteMatlSeq_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.WriteMatlSeq.End
+
+Program.Sub.GetNextSeq.Start
+F.Intrinsic.Control.SetErrorHandler("GetNextSeq_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.sJobSuffix.Declare(String)
+V.Local.sSql.Declare(String)
+V.Local.sMatlSeqNo.Declare(String)
+V.Local.iMatlSeqNo.Declare(Long)
+
+V.Local.sJobSuffix.Set(V.Args.sJobSuffix)
+
+F.Intrinsic.String.Split(V.Local.sJobSuffix,"*!*",V.Local.sJobSuffix)
+
+'Get Last Sequence number from job operations. set V.Local.iMatlSeqNo
+F.Intrinsic.String.Concat("Select TOP 1 SEQ From V_JOB_OPERATIONS Where JOB = '",V.Local.sJobSuffix(0),"' And SUFFIX = '",V.Local.sJobSuffix(1),"' And SEQ Not Like '99%' Order By SEQ Desc",V.Local.sSQL)
+F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,False)
+	V.Local.sMatlSeqNo.Set(V.ODBC.conx!rst.FieldValTrim!SEQ)
+F.Intrinsic.Control.EndIf
+F.ODBC.conx!rst.Close
+
+F.Intrinsic.Control.SelectCase(V.Global.iSeqInc)
+	F.Intrinsic.Control.Case(10)
+		F.Intrinsic.String.Left(V.Local.sMatlSeqNo,5,V.Local.sMatlSeqNo)
+	F.Intrinsic.Control.Case(100)
+		F.Intrinsic.String.Left(V.Local.sMatlSeqNo,4,V.Local.sMatlSeqNo)
+	F.Intrinsic.Control.Case(1000)
+		F.Intrinsic.String.Left(V.Local.sMatlSeqNo,3,V.Local.sMatlSeqNo)
+	F.Intrinsic.Control.Case(10000)
+		F.Intrinsic.String.Left(V.Local.sMatlSeqNo,2,V.Local.sMatlSeqNo)
+	F.Intrinsic.Control.Case(100000)
+		F.Intrinsic.String.Left(V.Local.sMatlSeqNo,1,V.Local.sMatlSeqNo)
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.String.RPad(V.Local.sMatlSeqNo,"0",6,V.Local.sMatlSeqNo)
+
+V.Local.iMatlSeqNo.Set(V.Local.sMatlSeqNo)
+
+F.Intrinsic.Control.Do
+	'Get Last Sequence number from job operations. set V.Local.iMatlSeqNo
+	F.Intrinsic.String.Concat("Select TOP 1 SEQ From V_JOB_OPERATIONS Where JOB = '",V.Local.sJobSuffix(0),"' And SUFFIX = '",V.Local.sJobSuffix(1),"' And SEQ = '",V.Local.sMatlSeqNo,"'",V.Local.sSQL)
+	F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+	F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,False)
+		F.Intrinsic.Math.Add(V.Local.iMatlSeqNo,V.Global.iSeqInc,V.Local.iMatlSeqNo)
+		F.Intrinsic.String.LPad(V.Local.iMatlSeqNo,"0",6,V.Local.sMatlSeqNo)
+		F.ODBC.conx!rst.Close
+	F.Intrinsic.Control.Else
+		F.ODBC.conx!rst.Close
+		F.Intrinsic.Control.ExitDo
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Loop
+
+F.Intrinsic.Variable.AddRV("iMatlSeqNo",V.Local.iMatlSeqNo)
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("GetNextSeq_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+F.Intrinsic.UI.Msgbox(V.Local.sError)
+F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.GetNextSeq.End
+
+Program.Sub.ScheduleJobs.Start
+F.Intrinsic.Control.SetErrorHandler("ScheduleJobs_Err")
+V.Local.sError.Declare(String)
+
+'Start
+V.Local.i.Declare(Long)
+V.Local.sJobSuffix.Declare(String)
+V.Local.sTemp.Declare(String)
+
+
+F.Intrinsic.Control.If(V.Global.sExistJobs,<>,"")
+	F.Intrinsic.Control.For(V.Local.i,0,V.Global.sExistJobs.UBound,1)
+		
+		F.Intrinsic.String.Split(V.Global.sExistJobs(V.Local.i),"*!*",V.Local.sJobSuffix)
+		F.Intrinsic.String.Format(V.Local.sJobSuffix(2),"MMDDYY",V.Local.sJobSuffix(2))
+		
+		F.Intrinsic.String.Concat("ZDR!*!",V.Local.sJobSuffix(2),"!*!",V.Local.sJobSuffix(0),"!*!",V.Local.sJobSuffix(1),"!*!ZDR!*!B",V.Local.sTemp)
+		F.Global.General.CallWrapperSync(500030,V.Local.sTemp)
+	F.Intrinsic.Control.Next(V.Local.i)
+F.Intrinsic.Control.EndIf
+
+'End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("ScheduleJobs_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4579_WO_UPLOAD_TYC.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.ScheduleJobs.End
+
+Program.Sub.Comments.Start
+${$0$}$GCG_WO_UPLOAD_TYC$}$BSELLERS$}$3/24/2014$}$False
+${$3$}$0$}$$}$-1$}$-1$}$$}$1/1/1900$}$Upload Material sequences to WO from Spreadsheet
+${$5$}$2.0.0.0$}$2
+${$6$}$wnichols$}$20210628170739540$}$h3jCD/nJ6bE/cd0Fx7GbYZBAEscRS8LBO2yOYISFOEmErv8we0HwIxvEcBpR5wYIu/k5zEodW9Wp4kzBVu4GFg==
+Program.Sub.Comments.End
+
